@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>提案競賽評審投票系統</title>
+<style>
+:root{--bg:#0b1730;--card:#13264d;--line:#2a4378;--tx:#eef3ff;--mut:#a9b8d8;--blue:#4cc2ff;--gold:#f5c451;--ok:#3ddbb0;--err:#ff8a8a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#0b1730}}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:12px}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:8px 0}
+h1{font-size:1.3rem;margin:0;color:var(--gold)}h2,h3{margin:.2rem 0 .6rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+button,.btn{min-height:44px;padding:8px 16px;border-radius:8px;border:2px solid var(--blue);background:transparent;color:var(--tx);font:inherit;cursor:pointer}
+button.p{background:var(--blue);color:#06142b;font-weight:700}button.g{background:var(--gold);border-color:var(--gold);color:#201600;font-weight:700}
+button.d{border-color:var(--err);color:var(--err)}button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+input,select,textarea{min-height:44px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#0b1a38;color:var(--tx);font:inherit;width:100%}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.step{border:2px solid var(--line);border-radius:10px;padding:8px;text-align:center}
+.step.now{border-color:var(--gold)}.step.done{border-color:var(--ok)}.step small{display:block;color:var(--mut)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.err{color:var(--err);font-weight:700}.ok{color:var(--ok);font-weight:700}.note{color:var(--mut)}
+.big{font-size:1.5rem;font-weight:700}
+.sum{display:flex;flex-wrap:wrap;gap:20px;position:sticky;top:0;background:var(--card);padding:6px 0;z-index:2}
+table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:middle}
+.tw{overflow-x:auto}
+.bar{background:#0b1a38;border-radius:6px;height:14px;min-width:90px}.bar i{display:block;height:100%;background:var(--blue);border-radius:6px}
+.opt{display:flex;gap:10px;align-items:center;border:2px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;min-height:56px}
+.opt.sel{border-color:var(--gold);background:#1b3366}.opt.dis{opacity:.45;cursor:not-allowed}.opt input{width:24px;min-height:24px}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:12px;z-index:9}
+.box{background:var(--card);border:2px solid var(--gold);border-radius:12px;padding:18px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
+.qrgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.qrc{background:#fff;color:#000;border-radius:10px;padding:12px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px;break-inside:avoid;border:1px dashed #666}
+.qrc b{font-size:1.25rem}.qrimg img,.qrimg canvas{max-width:100%}
+@media print{body{background:#fff}#app,.noprint{display:none!important}.ov{position:static;background:none;padding:0}.box{border:none;max-height:none;max-width:none;background:#fff;color:#000;padding:0}.qrgrid{grid-template-columns:repeat(2,1fr)}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+<main id="app"></main><div id="modal"></div>
+<script>
+/* ===== 常數（管理密碼集中於此）===== */
+const ADMIN_PW='8888', LIMIT=300000, KEY='pitch_vote_v1';
+const ROUNDS=[{n:'投資配置',d:'每位評審擁有 NT$ 300,000，可自由分配給 8 組提案（可不用完）。'},
+{n:'最佳創新獎',d:'請選出 2 個最具創新性的提案，評估其是否提出突破既有做法的新觀點或新解法，並具備創意性、前瞻性及未來發展潛力。'},
+{n:'最佳實踐獎',d:'請選出 2 個最具落地可行性的提案，評估其是否具備實際執行的可能性，並綜合考量執行路徑、資源需求、推動條件及風險考量。'}];
+const $=s=>document.querySelector(s);
+const nt=n=>'NT$ '+Number(n).toLocaleString('en-US');
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtT=t=>t?new Date(t).toLocaleTimeString('zh-TW'):'';
+
+/* ===== 儲存層（日後可替換為 Supabase / Firebase / API）===== */
+const Store={
+  load(){try{const s=JSON.parse(localStorage.getItem(KEY));return valid(s)?s:null}catch(e){return null}},
+  save(s){try{localStorage.setItem(KEY,JSON.stringify(s))}catch(e){}}
+};
+function demo(){return{title:'提案競賽評審投票',teams:[1,2,3,4,5,6,7,8].map(i=>'提案 '+i),
+  judges:['蔡維奇副校長','莊銘福總經理','張升寶副總','徐德里副總','黃品睿副總','蔡隆裕副總'].map((n,i)=>({id:'j'+(i+1),name:n})),nid:7,cur:0,
+  rounds:[0,1,2].map(()=>({open:false,locked:false,ts:null})),votes:[{},{},{}]}}
+function valid(s){return s&&Array.isArray(s.teams)&&s.teams.length===8&&Array.isArray(s.judges)&&Array.isArray(s.rounds)&&s.rounds.length===3&&Array.isArray(s.votes)&&s.votes.length===3&&[0,1,2].includes(s.cur)&&s.judges.every(j=>j&&j.id)}
+let S=Store.load(), corrupted=false;
+if(!S){corrupted=localStorage.getItem(KEY)!==null;S=demo();Store.save(S)}
+/* 目前輪次只要未鎖定就自動開放；其餘輪次一律不開放 */
+function norm(){S.rounds.forEach(x=>x.open=!x.locked)}
+norm();
+/* ===== 多裝置同步（db）：config/main 存設定，votes/r{輪}_{評審} 各自一份，避免互相覆蓋 ===== */
+let DB=null,mode='init',cfgReady=false;
+const cfg=()=>({title:S.title,teams:S.teams,judges:S.judges,nid:S.nid,cur:S.cur,rounds:S.rounds});
+function dberr(e){const d=document.createElement('div');d.setAttribute('role','alert');d.textContent='⚠ 同步失敗：'+(e&&e.message||e);d.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#ff8a8a;color:#200;padding:12px 24px;border-radius:10px;font-weight:700;z-index:10';document.body.append(d);setTimeout(()=>d.remove(),4000)}
+const save=()=>{norm();Store.save(S);if(DB)DB.doc('config/main').set(JSON.parse(JSON.stringify(cfg()))).then(()=>toast('✔ 已儲存')).catch(dberr)};
+function setTeam(i,v){S.teams=S.teams.map((t,k)=>k===i?(v.trim()||'提案 '+(i+1)):t);save()}
+function setJudge(i,v){S.judges=S.judges.map((j,k)=>k===i?{...j,name:v.trim()||'評審'}:j);save()}
+function putVote(r,id,d){S.votes[r][id]=d;Store.save(S);if(DB)DB.doc(`votes/r${r}_${id}`).set({r,jid:id,...d}).catch(dberr)}
+function wipe(from,only,to=2){for(let k=from;k<=to;k++){for(const id of Object.keys(S.votes[k])){if(only&&id!==only)continue;if(DB)DB.doc(`votes/r${k}_${id}`).delete().catch(dberr);delete S.votes[k][id]}}}
+let _t=null;
+function soft(){norm();clearTimeout(_t);_t=setTimeout(()=>{Store.save(S);const a=document.activeElement;if(dirty||(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)))return;render()},400)}
+/* ===== 公告：即時繪製長條圖 PNG（可全螢幕播放或下載）===== */
+let annR=null;
+function drawChart(r){
+  const d=calc(r),F='"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif',W=1280,H=170+d.length*72+60;
+  const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');x.textBaseline='middle';
+  x.fillStyle='#0b1730';x.fillRect(0,0,W,H);
+  x.fillStyle='#f5c451';x.font='bold 42px '+F;x.fillText(S.title+'｜'+ROUNDS[r].n,50,50,W-100);
+  x.fillStyle='#a9b8d8';x.font='24px '+F;
+  x.fillText(`已投 ${S.judges.length-pending(r).length}/${S.judges.length} 位評審・${S.rounds[r].locked?'已鎖定':'目前統計（尚未鎖定）'}・${new Date().toLocaleString('zh-TW')}`,50,100,W-100);
+  const s=[...d].sort((a,b)=>a.rank-b.rank||a.i-b.i),mx=Math.max(...d.map(t=>t.val),0),x0=400,bw=560;let tie=false;
+  s.forEach((t,k)=>{const y=150+k*72,tied=d.filter(z=>z.rank===t.rank).length>1,top=t.rank===1&&mx>0;if(tied)tie=true;
+    x.fillStyle=top?'#f5c451':'#a9b8d8';x.font='bold 26px '+F;x.fillText(`第${t.rank}名${tied?'*':''}`,50,y+30);
+    x.fillStyle='#eef3ff';x.font='28px '+F;x.fillText(t.n,170,y+30,210);
+    x.fillStyle='#13264d';x.fillRect(x0,y+10,bw,40);
+    x.fillStyle=top?'#f5c451':'#4cc2ff';x.fillRect(x0,y+10,mx?bw*t.val/mx:0,40);
+    x.fillStyle='#eef3ff';x.font='bold 24px '+F;
+    x.fillText(r?`${t.score} 分・第一順位 ${t.first} 票`:`${nt(t.total)}（${t.cnt}人）`,x0+bw+16,y+30,W-x0-bw-30)});
+  x.fillStyle='#a9b8d8';x.font='22px '+F;
+  const tp=s.filter(t=>t.rank===1);
+  x.fillText(mx===0?'目前尚無有效投票（全部為 0）':`${r?'最高分':'投資最高'}：${tp.map(t=>t.n).join('、')}${tp.length>1?'（並列）':''}`+(tie?'　*同名次並列':''),50,H-30,W-100);
+  return c}
+async function dlChart(r){
+  const c=drawChart(r),blob=await new Promise(res=>c.toBlob(res,'image/png'));
+  try{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(S.title+'-'+ROUNDS[r].n+'-長條圖.png').replace(/[\\/:*?"<>|]/g,'');document.body.append(a);a.click();a.remove()}
+  catch(e){if(e&&e.code==='declined')return;
+    modal(`<h3 id="mt">${ROUNDS[r].n}長條圖</h3><p class="note">請長按（手機）或按右鍵（電腦）圖片另存。</p><img alt="${ROUNDS[r].n}長條圖" style="max-width:100%" src="${c.toDataURL('image/png')}">`)}}
+function annc(r){const c=drawChart(r);
+  $('#modal').innerHTML=`<div class="ov" style="background:#000" role="dialog" aria-modal="true" aria-label="公告結果"><div style="width:100%;text-align:center"><img alt="${ROUNDS[r].n}長條圖" style="max-width:100%;max-height:82vh" src="${c.toDataURL('image/png')}"><div class="row" style="justify-content:center;margin-top:10px"><button onclick="annc(${r})">重新整理</button><button class="p" onclick="dlChart(${r})">⬇ 下載 PNG</button><button onclick="closeM()">關閉</button></div></div></div>`}
+/* ===== Firebase Realtime Database 轉接層：用 Firebase 模擬原本的 doc/collection 介面 ===== */
+/* 請到 Firebase 主控台 → 專案設定 → 您的應用程式（網頁）複製設定值，貼到下方 */
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyCzSkM942MT2AV1rQZrnFiQObpFNHUqH6A",
+  authDomain:"vote1-7e13e.firebaseapp.com",
+  databaseURL:"https://vote1-7e13e-default-rtdb.asia-southeast1.firebasedatabase.app",   // 例如 https://xxxx-default-rtdb.asia-southeast1.firebasedatabase.app
+  projectId:"vote1-7e13e",
+  appId:"1:264520337690:web:67b17fc4d16b8950b844a3"
+};
+function resetJ(id,k){const j=S.judges.find(x=>x.id===id);if(!j)return;const lab=k<0?'全部三輪':`第 ${k+1} 輪（${ROUNDS[k].n}）`;
+  modal(`<h3 id="mt">重設單一評審</h3><p>確定清除「${esc(j.name)}」的${lab}投票？其他評審不受影響，此動作無法復原。</p>`,()=>{wipe(k<0?0:k,id,k<0?2:k);render()},'確認重設',true)}
+function bulkJ(){window._bj='';modal(`<h3 id="mt">批次新增評審</h3><label for="bj">每行一位姓名</label><textarea id="bj" rows="8" oninput="window._bj=this.value"></textarea>`,()=>{
+  const ns=(window._bj||'').split('\n').map(x=>x.trim()).filter(Boolean);if(!ns.length)return;
+  S.judges=S.judges.concat(ns.map(n=>({id:'j'+(S.nid++),name:n})));save();render()},'新增')}
+/* 列印每位評審專屬 QR（掃描後直接以該評審身分進入投票） */
+function printQR(){const base=location.origin+location.pathname;
+  modal(`<h3 id="mt" class="noprint">評審專屬 QR 條碼</h3><p class="note noprint">每位評審一張，掃描後直接進入該評審的投票頁。網址：${esc(base)}</p><div class="noprint" style="margin:8px 0"><button class="p" onclick="window.print()">🖨 列印</button></div><div class="qrgrid">${S.judges.map(j=>`<div class="qrc"><div id="qr_${j.id}" class="qrimg"></div><b>${esc(j.name)}</b><small>${esc(S.title)}</small></div>`).join('')}</div>`);
+  setTimeout(()=>S.judges.forEach(j=>{const el=$('#qr_'+j.id);if(!el)return;try{new QRCode(el,{text:`${base}?j=${j.id}`,width:180,height:180})}catch(e){el.textContent=`${base}?j=${j.id}`}}),60)}
+async function fbInit(){
+  try{
+    if(!FIREBASE_CONFIG.databaseURL)return null;
+    const B='https://www.gstatic.com/firebasejs/10.12.2/';
+    const {initializeApp}=await import(B+'firebase-app.js');
+    const F=await import(B+'firebase-database.js');
+    const db=F.getDatabase(initializeApp(FIREBASE_CONFIG));
+    const mk=p=>({
+      set:d=>F.set(F.ref(db,p),d),
+      delete:()=>F.remove(F.ref(db,p)),
+      onSnapshot:(cb,eb)=>F.onValue(F.ref(db,p),s=>cb({exists:s.exists(),data:()=>s.val()}),eb)
+    });
+    return{doc:mk,collection:p=>({onSnapshot:(cb,eb)=>F.onValue(F.ref(db,p),s=>{const docs=[];s.forEach(c=>{docs.push({id:c.key,data:()=>c.val()})});cb({docs})},eb)})};
+  }catch(e){console.error(e);return null}
+}
+async function initDB(){
+  DB=await fbInit();
+  if(!DB){mode='local';return render()}
+  mode='shared';
+  DB.doc('config/main').onSnapshot(s=>{cfgReady=true;
+    if(s.exists){const c=JSON.parse(JSON.stringify(s.data()||{}));if(c&&Array.isArray(c.teams)){Object.assign(S,{title:c.title,teams:c.teams,judges:c.judges,nid:c.nid||S.nid,cur:c.cur,rounds:c.rounds});if(!valid(S))S=Object.assign(demo(),{votes:S.votes})}}
+    else DB.doc('config/main').set(cfg()).catch(dberr);
+    soft()},()=>{mode='local';render()});
+  DB.collection('votes').onSnapshot(q=>{const v=[{},{},{}];q.docs.forEach(d=>{const x=d.data();if(x&&x.r>=0&&x.r<3&&x.jid)v[x.r][x.jid]=x});S.votes=v;soft()},()=>{});
+  render()}
+const ses={get j(){return sessionStorage.getItem('judge')},set j(v){v?sessionStorage.setItem('judge',v):sessionStorage.removeItem('judge')},
+  get a(){return sessionStorage.getItem('admin')==='1'},set a(v){v?sessionStorage.setItem('admin','1'):sessionStorage.removeItem('admin')}};
+
+/* ===== 業務規則（與畫面分離）===== */
+function parseAmt(v){v=String(v).trim();if(v==='')return{ok:true,n:0};
+  if(!/^\d+$/.test(v))return{ok:false,err:'僅限 0 或正整數（不可為負數、小數或文字）'};return{ok:true,n:parseInt(v,10)}}
+function validateAlloc(arr){const p=arr.map(parseAmt);const bad=p.map(x=>x.ok?'':x.err);
+  const total=p.reduce((a,x)=>a+(x.ok?x.n:0),0);
+  return{bad,total,left:LIMIT-total,over:total>LIMIT,ok:p.every(x=>x.ok)&&total<=LIMIT,nums:p.map(x=>x.n||0)}}
+const validateSel=sel=>sel.length===2&&new Set(sel).size===2;
+const rank=v=>v.map(x=>1+v.filter(y=>y>x).length); // 同分同名次，不另設突破平手規則
+const ids=()=>new Set(S.judges.map(j=>j.id));
+function votesOf(r){const k=ids();return Object.entries(S.votes[r]).filter(([id])=>k.has(id))}
+function calc(r){const J=votesOf(r);
+  if(r===0){const sum=S.teams.map((_,i)=>J.reduce((a,[,v])=>a+(v.alloc[i]||0),0));const rk=rank(sum);
+    return S.teams.map((n,i)=>({i,n,total:sum[i],avg:J.length?Math.round(sum[i]/J.length):0,cnt:J.filter(([,v])=>v.alloc[i]>0).length,rank:rk[i],val:sum[i]}))}
+  const sc=S.teams.map((_,i)=>J.reduce((a,[,v])=>a+(v.sel[0]===i?3:v.sel[1]===i?1:0),0));
+  const f1=S.teams.map((_,i)=>J.filter(([,v])=>v.sel[0]===i).length),f2=S.teams.map((_,i)=>J.filter(([,v])=>v.sel[1]===i).length);
+  const rk=rank(sc.map((x,i)=>x*1000000+f1[i])); // 先比總分，同分再比第一順位票數，仍相同則並列
+  return S.teams.map((n,i)=>({i,n,score:sc[i],first:f1[i],second:f2[i],rank:rk[i],val:sc[i]}))}
+const pending=r=>{const k=new Set(votesOf(r).map(([id])=>id));return S.judges.filter(j=>!k.has(j.id))};
+/* 評審個人進度：投完（或該輪已被鎖定）才能進入下一輪 */
+function allowed(id){for(let k=0;k<2;k++){if(!S.votes[k][id]&&!S.rounds[k].locked)return k}return 2}
+function jrOf(id){return Math.min(+sessionStorage.getItem('jr_'+id)||0,allowed(id))}
+function nextJ(){const id=ses.j;sessionStorage.setItem('jr_'+id,jrOf(id)+1);draft=null;dirty=false;editing=false;render();window.scrollTo(0,0)}
+const nextBtn=()=>{const r=jrOf(ses.j);return`<button class="g" style="width:100%;min-height:72px;font-size:1.3rem;margin:14px 0" onclick="nextJ()">進入第 ${r+2} 輪：${ROUNDS[r+1].n} →</button>`};
+const ended=r=>S.rounds[r].locked||(S.judges.length>0&&pending(r).length===0);
+const waitBox=r=>{const p=pending(r);return`<div class="card" role="status"><b>⏳ 等待其他評審完成（${S.judges.length-p.length}/${S.judges.length}）</b><p class="note">尚未完成：${p.map(x=>esc(x.name)).join('、')}。全員完成後這裡會自動顯示得票結果。</p></div>`};
+const doneBox=(r,m)=>`<div style="text-align:center;padding:8px"><p class="ok big" role="status">✔ 第 ${r+1} 輪已送出（${fmtT(m.ts)}）</p>${mineHTML(r,m)}${r<2?nextBtn():'<p class="ok big">🎉 您已完成全部三輪！</p>'}${S.rounds[r].locked?'':'<button onclick="editing=true;render()">修改我的投票</button>'}</div>`;
+const rStatus=i=>S.rounds[i].locked?'已鎖定（已完成）':i===S.cur?(S.rounds[i].open?'進行中':'目前輪次（待開放）'):'尚未開放';
+
+/* ===== 共用元件 ===== */
+function modal(html,ok,label='確認',danger){window._ok=ok;
+  $('#modal').innerHTML=`<div class="ov"><div class="box" role="dialog" aria-modal="true" aria-labelledby="mt">${html}
+  <div class="row noprint" style="margin-top:14px;justify-content:flex-end"><button onclick="closeM()">取消</button>${ok?`<button class="${danger?'d':'p'}" id="mok" onclick="closeM();_ok()">${label}</button>`:''}</div></div></div>`;
+  ($('#mok')||$('#modal button')).focus()}
+const closeM=()=>$('#modal').innerHTML='';
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeM()});
+function progress(){const jv=view()==='judge'&&ses.j&&S.judges.some(j=>j.id===ses.j),now=jv?jrOf(ses.j):S.cur,al=jv?allowed(ses.j):S.cur;const st=i=>S.rounds[i].locked?'已鎖定（已完成）':i===now?'進行中':i<now?'已完成':i<=al?'已開放':'尚未開放';return`<div class="steps" role="list" aria-label="競賽進度">${ROUNDS.map((r,i)=>`<div class="step ${S.rounds[i].locked?'done':i===now?'now':''}" role="listitem"><b>${i+1}. ${r.n}</b><small>${S.rounds[i].locked?'🔒 ':i===now?'▶ ':'⏳ '}${st(i)}</small></div>`).join('')}</div>`}
+function resHTML(r){const d=calc(r);const mx=Math.max(...d.map(x=>x.val),0);const none=mx===0;
+  const top=d.filter(x=>x.rank===1);
+  const sorted=[...d].sort((a,b)=>a.rank-b.rank||a.i-b.i);
+  return`<div class="card"><h3>${ROUNDS[r].n}・結果</h3>`+(none?`<p class="note">本輪無人投票或全部為 ${r?'0 分':'NT$ 0'}，所有組別皆為 0。</p>`:`<p><b>${r?'最高分':'投資金額最高'}：</b>${top.map(x=>esc(x.n)).join('、')}${top.length>1?'（並列，不自行決定得獎者）':''}</p>`)+
+  `<div class="tw"><table><thead><tr><th>名次</th><th>組別</th>${r?'<th>總分</th><th>第一順位票數</th><th>第二順位票數</th>':'<th>總投資</th><th>平均</th><th>投資人數</th>'}<th>圖表</th></tr></thead><tbody>`+
+  sorted.map(x=>`<tr><td>第 ${x.rank} 名${d.filter(y=>y.rank===x.rank).length>1?'（並列）':''}</td><td>${esc(x.n)}</td>`+(r?`<td><b>${x.score} 分</b></td><td>${x.first} 票</td><td>${x.second} 票</td>`:`<td>${nt(x.total)}</td><td>${nt(x.avg)}</td><td>${x.cnt} 人</td>`)+`<td><div class="bar" role="img" aria-label="${x.val}"><i style="width:${mx?x.val/mx*100:0}%"></i></div></td></tr>`).join('')+`</tbody></table></div>`+
+  (r===0?`<p class="note">平均 = 總投資 ÷ 已送出評審數（${votesOf(0).length} 人）。</p>`:`<p class="note">計分：第一順位 3 分、第二順位 1 分。先比總分；總分相同則比第一順位票數；仍相同則並列。</p>`)+`</div>`}
+function overview(){if(!S.rounds[2].locked)return'';const a=calc(0),b=calc(1),c=calc(2);
+  return`<div class="card"><h3>🏁 最終總覽</h3><p class="note">目前未設定綜合排名規則；三項結果彼此獨立，系統不計算總分或總冠軍。</p><div class="tw"><table><thead><tr><th>組別</th><th>投資總額</th><th>投資排名</th><th>創新總分</th><th>創新第一順位票</th><th>創新排名</th><th>實踐總分</th><th>實踐第一順位票</th><th>實踐排名</th></tr></thead><tbody>`+
+  S.teams.map((n,i)=>`<tr><td>${esc(n)}</td><td>${nt(a[i].total)}</td><td>第 ${a[i].rank} 名</td><td>${b[i].score} 分</td><td>${b[i].first} 票</td><td>第 ${b[i].rank} 名</td><td>${c[i].score} 分</td><td>${c[i].first} 票</td><td>第 ${c[i].rank} 名</td></tr>`).join('')+`</tbody></table></div></div>`}
+
+/* ===== 路由 ===== */
+function view(){return location.hash.replace('#','')||'judge'}
+let dirty=false, draft=null, editing=false;
+function render(){const v=view();
+  $('#app').innerHTML=`<header><h1>${esc(S.title)}</h1><nav class="row" aria-label="主選單"><button onclick="go('judge')">評審端</button><button onclick="go('admin')">管理端</button></nav></header>${progress()}<p class="note" role="status">${mode==='shared'?'🟢 已連線：所有裝置即時同步':mode==='local'?'⚠ 目前為單機模式：資料只存在這台裝置，無法與其他裝置同步':'連線中…'}</p>`+
+  (corrupted?'<p class="err" role="alert">⚠ 偵測到儲存資料格式錯誤，已重設為示範資料。</p>':'')+
+  (v==='judge'?judgeView():v==='admin'?adminView():home())+(v!=='home'?overview():'');
+  if(v==='judge'&&draft&&draft.r===0)updInv()}
+const go=h=>{location.hash=h;dirty=false;draft=null;render()};
+window.addEventListener('hashchange',render);
+window.addEventListener('storage',()=>{const s=Store.load();if(s){S=s;if(!dirty)render()}});
+function home(){return`<div class="grid"><div class="card"><h2>評審端</h2><p>選擇身分後依序投票。</p><button class="p" onclick="go('judge')">進入評審端</button></div><div class="card"><h2>管理端</h2><p>需輸入管理密碼。</p><button class="g" onclick="go('admin')">進入管理端</button></div></div>`}
+
+/* ===== 評審端 ===== */
+function judgeView(){const j=S.judges.find(x=>x.id===ses.j);
+  if(!j){if(ses.j&&(mode==='init'||(mode==='shared'&&!cfgReady)))return'<div class="card" role="status">載入中…</div>';ses.j=null;return`<div class="card"><h2>請選擇您的身分</h2>${S.judges.length?'<div class="grid">'+S.judges.map(x=>`<button class="p" onclick="pick('${x.id}')">${esc(x.name)}</button>`).join('')+'</div>':'<p>尚無評審，請管理員新增。</p>'}</div>`}
+  const r=jrOf(j.id),R=S.rounds[r],mine=S.votes[r][j.id];
+  let h=`<div class="card row" style="justify-content:space-between"><span>目前身分：<b>${esc(j.name)}</b></span>${sessionStorage.getItem('lockj')?'':'<button onclick="ses.j=null;draft=null;dirty=false;render()">切換身分</button>'}</div>`;
+  h+=`<div class="card"><h2>第 ${r+1} 輪：${ROUNDS[r].n}</h2><p>${ROUNDS[r].d}</p>`;
+  if(R.locked){h+=`<p class="ok">✔ 本輪已結束並鎖定，無法再修改。</p>`+mineHTML(r,mine)+(r<2?nextBtn():'<p class="note">所有輪次已結束。</p>')+'</div>'+resHTML(r)+(r===2?resHTML(0)+resHTML(1):'');return h}
+  if(!R.open){h+=`<p role="status"><b>⏳ 等待管理員開放${r?'下一輪':'本輪'}。</b></p>`+mineHTML(r,mine)+'</div>';return h}
+  if(!draft||draft.r!==r||draft.jid!==j.id)draft=mine?{r,jid:j.id,alloc:r===0?mine.alloc.map(String):[],sel:r?[...mine.sel]:[]}:{r,jid:j.id,alloc:Array(8).fill(''),sel:[]};
+  if(mine&&!editing)return h+doneBox(r,mine)+'</div>'+(ended(r)?resHTML(r)+(r===2?resHTML(0)+resHTML(1):''):waitBox(r));
+  if(mine)h+='<p class="note" role="status">✏ 修改中：重新送出後會覆蓋原本的投票。</p>';
+  h+=r===0?invForm():pickForm(r);return h+'</div>'}
+function mineHTML(r,m){if(!m)return'<p class="note">您尚未送出本輪投票。</p>';
+  return`<div class="note">您的本輪投票：${r===0?S.teams.map((n,i)=>m.alloc[i]?`${esc(n)} ${nt(m.alloc[i])}`:'').filter(Boolean).join('、')||'全部 NT$ 0':`🥇 ${esc(S.teams[m.sel[0]])}（3 分）、🥈 ${esc(S.teams[m.sel[1]])}（1 分）`}</div>`}
+function pick(id){ses.j=id;draft=null;editing=false;render()}
+function invForm(){return`<div class="sum" role="status" aria-live="polite"><div>已投資<div class="big" id="used"></div></div><div>剩餘額度<div class="big" id="left"></div></div></div><p id="over" class="err" role="alert"></p>
+  <div class="grid">${S.teams.map((n,i)=>`<div class="card" style="margin:0"><label for="a${i}"><b>${esc(n)}</b>（NT$）</label>
+  <input id="a${i}" inputmode="numeric" autocomplete="off" value="${esc(draft.alloc[i])}" placeholder="0" aria-describedby="e${i}" oninput="setAmt(${i},this.value)">
+  <div id="e${i}" class="err" role="alert"></div><div class="row" style="margin-top:6px">${[10000,30000,50000,100000].map(q=>`<button onclick="addAmt(${i},${q})" aria-label="${esc(n)} 加 ${q}">+${q/1000}K</button>`).join('')}<button class="d" onclick="setAmt(${i},'',1)">清除</button></div></div>`).join('')}</div>
+  <div class="row" style="margin-top:12px"><button class="d" onclick="clearAll()">全部清除</button><button class="p" id="sub" onclick="confirmInv()">送出投資配置</button></div>`}
+function setAmt(i,v,sync){draft.alloc[i]=v;dirty=true;if(sync)$('#a'+i).value=v;updInv()}
+function addAmt(i,q){const p=parseAmt(draft.alloc[i]);setAmt(i,String((p.ok?p.n:0)+q),1)}
+function clearAll(){draft.alloc=Array(8).fill('');S.teams.forEach((_,i)=>$('#a'+i).value='');dirty=true;updInv()}
+function updInv(){if(!draft||draft.r!==0||!$('#used'))return;const v=validateAlloc(draft.alloc);
+  $('#used').textContent=nt(v.total);$('#left').textContent=v.over?'- '+nt(-v.left):nt(v.left);
+  $('#over').textContent=v.over?`⚠ 錯誤：投資總額超過上限 ${nt(LIMIT)}，超出 ${nt(-v.left)}，無法送出。`:'';
+  v.bad.forEach((m,i)=>{$('#e'+i).textContent=m?'⚠ '+m:'';$('#a'+i).setAttribute('aria-invalid',m?'true':'false')});
+  $('#sub').disabled=!v.ok}
+function canSubmit(r){const R=S.rounds[r];return R.open&&!R.locked&&S.judges.some(j=>j.id===ses.j)&&r<=allowed(ses.j)}
+function confirmInv(){const v=validateAlloc(draft.alloc);if(!v.ok||!canSubmit(0))return;
+  modal(`<h3 id="mt">確認投資摘要</h3><table>${S.teams.map((n,i)=>`<tr><td>${esc(n)}</td><td>${nt(v.nums[i])}</td></tr>`).join('')}<tr><th>合計</th><th>${nt(v.total)}</th></tr></table><p>剩餘未投資：${nt(v.left)}</p>`,()=>{
+    if(!canSubmit(0))return render();putVote(0,ses.j,{alloc:v.nums,ts:Date.now()});dirty=false;editing=false;draft=null;render();toast();window.scrollTo(0,0)},'確認送出')}
+function pickForm(r){const full=draft.sel.length>=2;
+  return`<p role="status" aria-live="polite"><b>已選 ${draft.sel.length}/2</b>${draft.sel.length<2?'（需剛好選 2 組）':''}</p><p class="note">先點選的是 🥇 第一順位（3 分），再點選的是 🥈 第二順位（1 分）；想調換可按「對調順位」。</p><div class="grid">${S.teams.map((n,i)=>{const on=draft.sel.includes(i),dis=full&&!on;
+  return`<label class="opt ${on?'sel':''} ${dis?'dis':''}"><input type="checkbox" ${on?'checked':''} ${dis?'disabled':''} onchange="tog(${i})"><span>${esc(n)}${on?` <b>${draft.sel.indexOf(i)===0?'🥇 第一順位（3 分）':'🥈 第二順位（1 分）'}</b>`:''}${dis?'（已停用）':''}</span></label>`}).join('')}</div>
+  <div class="row" style="margin-top:12px"><button ${draft.sel.length<2?'disabled':''} onclick="swapSel()">🔄 對調順位</button><button class="p" ${validateSel(draft.sel)?'':'disabled'} onclick="confirmSel()">送出</button></div>`}
+function swapSel(){draft.sel.reverse();dirty=true;render()}
+function tog(i){const s=draft.sel;const k=s.indexOf(i);if(k>=0)s.splice(k,1);else if(s.length<2)s.push(i);dirty=true;render()}
+function confirmSel(){const r=draft.r;if(!validateSel(draft.sel)||!canSubmit(r))return;
+  modal(`<h3 id="mt">確認${ROUNDS[r].n}</h3><p>🥇 第一順位（3 分）：<b>${esc(S.teams[draft.sel[0]])}</b></p><p>🥈 第二順位（1 分）：<b>${esc(S.teams[draft.sel[1]])}</b></p>`,()=>{
+    if(!canSubmit(r))return render();putVote(r,ses.j,{sel:[...draft.sel],ts:Date.now()});dirty=false;editing=false;draft=null;render();toast();window.scrollTo(0,0)},'確認送出')}
+function toast(m){const d=document.createElement('div');d.setAttribute('role','status');d.textContent=m||'✔ 送出成功';d.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#3ddbb0;color:#06142b;padding:12px 24px;border-radius:10px;font-weight:700;z-index:10';document.body.append(d);setTimeout(()=>d.remove(),2500)}
+
+/* ===== 管理端 ===== */
+function adminView(){
+  if(!ses.a)return`<div class="card"><h2>管理員登入</h2><label for="pw">管理密碼</label><input id="pw" type="password" onkeydown="if(event.key==='Enter')login()"><div id="pwe" class="err" role="alert"></div><button class="g" style="margin-top:8px" onclick="login()">登入</button></div>`;
+  const r=S.cur,R=S.rounds[r],pd=pending(r);
+  return`<div class="card" style="border-color:#f5c451;border-width:2px"><h2>📢 快速公告（一鍵下載目前投票長條圖）</h2>${ROUNDS.map((x,i)=>`<div class="row" style="margin:8px 0"><b style="min-width:170px">${i+1}. ${x.n}（已投 ${S.judges.length-pending(i).length}/${S.judges.length}）</b><button class="p" style="min-width:200px" onclick="dlChart(${i})">⬇ 下載長條圖 PNG</button><button class="g" onclick="annc(${i})">全螢幕公告</button></div>`).join('')}<p class="note">依目前票數即時產生，不需先鎖定；未鎖定時圖上會標示「尚未鎖定」。</p></div>
+  <div class="card"><h2>列印、匯出與登出</h2>
+  <div class="row">
+  
+  
+  <button class="g" onclick="printQR()">🖨 列印評審 QR 條碼</button><button onclick="csv()">匯出 CSV</button><button onclick="logout()">登出</button></div></div>
+  
+  <div class="card"><h3>評審完成狀態</h3><div class="tw"><table><thead><tr><th>評審</th>${ROUNDS.map(x=>`<th>${x.n}</th>`).join('')}<th>操作</th></tr></thead><tbody>${S.judges.map(j=>`<tr><td>${esc(j.name)}</td>${[0,1,2].map(k=>{const v=S.votes[k][j.id];return`<td>${v?`<span class="ok">✔ ${fmtT(v.ts)}</span><br><button class="d" onclick="resetJ('${j.id}',${k})" aria-label="重設${esc(j.name)}第${k+1}輪">重設</button>`:'<span class="err">✖ 未送出</span>'}</td>`}).join('')}<td><button class="d" onclick="resetJ('${j.id}',-1)">重設此人全部</button></td></tr>`).join('')}</tbody></table></div><p class="note">各輪完成人數：${[0,1,2].map(k=>`${ROUNDS[k].n} ${S.judges.length-pending(k).length}/${S.judges.length}`).join('　')}</p></div>
+  <div class="card"><h3>活動設定</h3><label for="tt">活動名稱</label><input id="tt" value="${esc(S.title)}" onchange="S.title=this.value.trim()||'提案競賽';save();render()">
+  <h3 style="margin-top:12px">8 組提案名稱</h3><div class="grid">${S.teams.map((n,i)=>`<div><label for="tn${i}">提案 ${i+1}</label><input id="tn${i}" value="${esc(n)}" onchange="setTeam(${i},this.value)"></div>`).join('')}</div>
+  <h3 style="margin-top:12px">評審名單</h3><div class="grid">${S.judges.map((j,i)=>`<div class="row"><label class="note" for="jn${i}" style="width:100%">評審 ${i+1}</label><input id="jn${i}" style="flex:1" value="${esc(j.name)}" onchange="setJudge(${i},this.value)"><button class="d" onclick="delJ(${i})" aria-label="刪除 ${esc(j.name)}">刪除</button></div>`).join('')}</div>
+  <button style="margin-top:8px" onclick="addJ()">＋ 新增評審</button> <button style="margin-top:8px" onclick="bulkJ()">＋ 批次貼上名單</button></div>
+  <div class="card"><h3>危險操作</h3><div class="row"><label for="rr">重設輪次</label><select id="rr" style="width:auto">${ROUNDS.map((x,i)=>`<option value="${i}">${i+1}. ${x.n}</option>`).join('')}</select><button class="d" onclick="resetR()">重設指定輪次</button><button class="d" onclick="resetAll()">重設整場活動</button><button onclick="loadDemo()">載入示範資料</button></div></div>`
+  +[0,1,2].filter(i=>S.rounds[i].locked).map(resHTML).join('')}
+function login(){if($('#pw').value===ADMIN_PW){ses.a=true;render()}else $('#pwe').textContent='⚠ 密碼錯誤'}
+const logout=()=>{ses.a=false;render()};
+function openR(){S.rounds[S.cur].open=true;save();render()}
+function closeR(){const r=S.cur,pd=pending(r),n=S.judges.length;
+  modal(`<h3 id="mt">結束並鎖定「${ROUNDS[r].n}」</h3><p>已完成：<b>${n-pd.length}</b> 人　未完成：<b>${pd.length}</b> 人</p>`+(pd.length?`<p class="err" role="alert">⚠ 警告：以下評審尚未完成，鎖定後將無法補投：<br>${pd.map(j=>esc(j.name)).join('、')}</p>`:'')+'<p>鎖定後資料不可修改，並公布結果。</p>',()=>{
+    S.rounds[r]={open:false,locked:true,ts:Date.now()};save();render()},'確認鎖定',pd.length>0)}
+function nextR(){if(S.rounds[S.cur].locked&&S.cur<2){S.cur++;save();render()}}
+function addJ(){S.judges=S.judges.concat([{id:'j'+(S.nid++),name:'評審 '+(S.judges.length+1)}]);save();render()}
+function delJ(i){const j=S.judges[i];modal(`<h3 id="mt">刪除評審</h3><p>確定刪除「${esc(j.name)}」？其已送出的投票也會移除。</p>`,()=>{
+  wipe(0,j.id);S.judges=S.judges.filter((_,k)=>k!==i);if(ses.j===j.id)ses.j=null;save();render()},'刪除',true)}
+function resetR(){const r=+$('#rr').value;modal(`<h3 id="mt">重設「${ROUNDS[r].n}」</h3><p class="err">⚠ 將清除該輪投票並重新計算${r<2?'；其後各輪也會一併重設以維持流程一致':''}。此動作無法復原。</p>`,()=>{
+  wipe(r);for(let k=r;k<3;k++){S.rounds[k]={open:false,locked:false,ts:null}}S.cur=Math.min(S.cur,r);save();render()},'確認重設',true)}
+function resetAll(){modal('<h3 id="mt">重設整場活動</h3><p class="err">⚠ 將清除所有投票與輪次狀態（保留提案與評審名單）。此動作無法復原。</p>',()=>{
+  wipe(0);S.rounds=[0,1,2].map(()=>({open:false,locked:false,ts:null}));S.cur=0;ses.j=null;save();render()},'確認重設',true)}
+function loadDemo(){modal('<h3 id="mt">載入示範資料</h3><p class="err">⚠ 將覆蓋目前所有資料（名稱、名單、投票）。</p>',()=>{wipe(0);S=demo();corrupted=false;ses.j=null;save();render()},'確認載入',true)}
+function csv(){const a=calc(0),b=calc(1),c=calc(2);
+  const rows=[['組別','第1輪總投資','第1輪平均','投資人數','第1輪排名','創新總分','創新第一順位票數','創新第二順位票數','創新排名','實踐總分','實踐第一順位票數','實踐第二順位票數','實踐排名']];
+  S.teams.forEach((n,i)=>rows.push([n,a[i].total,a[i].avg,a[i].cnt,a[i].rank,b[i].score,b[i].first,b[i].second,b[i].rank,c[i].score,c[i].first,c[i].second,c[i].rank]));
+  const t='\ufeff'+rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n');
+  modal(`<h3 id="mt">匯出 CSV</h3><p class="note">若下載按鈕無反應，請複製下方內容貼到試算表或存成 .csv。</p><textarea id="csvt" rows="8" readonly>${esc(t)}</textarea><a class="btn" style="display:inline-block;margin-top:8px" download="results.csv" href="data:text/csv;charset=utf-8,${encodeURIComponent(t)}">下載 CSV</a> <button onclick="$('#csvt').select();document.execCommand('copy')">複製</button>`)}
+(function(){const q=new URLSearchParams(location.search).get('j');if(q){ses.j=q;sessionStorage.setItem('lockj','1');sessionStorage.removeItem('jr_'+q);history.replaceState(null,'',location.pathname+(location.hash||''));if(!location.hash)location.hash='judge'}})();
+render();initDB();
+</script>
+</body>
+</html>
